@@ -2,30 +2,60 @@ import subprocess
 import psutil
 import os
 import requests
+import shutil
 
+# 🐾 Paramètres par défaut
+VERSION = "1.21.8"
 JAR_NAME = "server.jar"
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))  # 🐱 dossier du script
-SERVER_DIR = os.path.join(SCRIPT_DIR, "server")  # 🐾 chemin absolu du serveur
-os.makedirs(SERVER_DIR, exist_ok=True)
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+SERVER_DIR = os.path.join(SCRIPT_DIR, "server")
+LOG_FILE = os.path.join(SERVER_DIR, "server.log")
 
-# Miaou 😹 : URL du serveur Minecraft 1.21.8
-MINECRAFT_URL = "https://launcher.mojang.com/v1/objects/9c85f1b9ad0c6325a70c2c19b2e1f15d34b9a5c2/server.jar"
+# Mémoire allouée
+XMX = "1G"
+XMS = "1G"
 
-# 🐾 Télécharger server.jar si nécessaire
-def download_server():
-    jar_path = os.path.join(SERVER_DIR, JAR_NAME)
-    if not os.path.exists(jar_path):
-        print("🐾 server.jar introuvable, téléchargement en cours...")
-        response = requests.get(MINECRAFT_URL, stream=True)
+# -----------------------------------
+# Fonction pour obtenir le lien du server.jar depuis le manifest officiel
+# -----------------------------------
+def get_server_jar_url(version=VERSION):
+    manifest_url = "https://launchermeta.mojang.com/mc/game/version_manifest.json"
+    manifest = requests.get(manifest_url).json()
+
+    # Trouve la version désirée
+    version_info = next((v for v in manifest["versions"] if v["id"] == version), None)
+    if not version_info:
+        raise ValueError(f"Version {version} non trouvée dans le manifest ! 😿")
+
+    version_json = requests.get(version_info["url"]).json()
+    return version_json["downloads"]["server"]["url"]
+
+# -----------------------------------
+# Téléchargement du serveur Minecraft
+# -----------------------------------
+def telecharger_minecraft(version=VERSION, server_dir=SERVER_DIR):
+    os.makedirs(server_dir, exist_ok=True)
+    
+    jar_path = os.path.join(server_dir, JAR_NAME)
+    json_path = os.path.join(server_dir, "server.jar")
+    
+    if not os.path.exists(json_path):
+        print(f"😺 server.json introuvable, téléchargement de server.jar Minecraft {version} ... 🐱")
+        
+        url = get_server_jar_url(version)
+        response = requests.get(url, stream=True)
+        response.raise_for_status()
+        
         with open(jar_path, "wb") as f:
             for chunk in response.iter_content(chunk_size=8192):
-                if chunk:
-                    f.write(chunk)
-        print("✅ server.jar téléchargé !")
+                f.write(chunk)
+        print("😸 Téléchargement terminé !")
     else:
-        print("😺 server.jar déjà présent.")
+        print("😺 server.json existe déjà, téléchargement annulé.")
 
-# 🐾 Vérifie si le serveur tourne
+# -----------------------------------
+# Vérifie si le serveur tourne déjà
+# -----------------------------------
 def find_server_process():
     for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
         try:
@@ -36,26 +66,39 @@ def find_server_process():
             pass
     return None
 
-# 🐱 Lancer le serveur
+# -----------------------------------
+# Lancer le serveur
+# -----------------------------------
 def start():
-    download_server()  # 🐾 assure que server.jar est là
+    # Vérification de Java
+    if not shutil.which("java"):
+        print("😿 Java non trouvé ! Installez Java avant de lancer le serveur.")
+        return
+
+    telecharger_minecraft()
+    
     if find_server_process():
         print("😺 Le serveur tourne déjà !")
         return
 
-    cmd = ["java", "-Xmx1G", "-Xms1G", "-jar", JAR_NAME, "nogui"]
-    subprocess.Popen(
-        cmd,
-        cwd=SERVER_DIR,
-        stdin=subprocess.PIPE,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        text=True,
-        creationflags=subprocess.CREATE_NEW_PROCESS_GROUP  # important sous Windows
-    )
-    print("🐾 Serveur Minecraft lancé !")
+    cmd = ["java", f"-Xmx{XMX}", f"-Xms{XMS}", "-jar", JAR_NAME, "nogui"]
+    
+    with open(LOG_FILE, "a") as log_file:
+        subprocess.Popen(
+            cmd,
+            cwd=SERVER_DIR,
+            stdin=subprocess.PIPE,
+            stdout=log_file,
+            stderr=log_file,
+            text=True,
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+        )
+    
+    print("🐾 Serveur Minecraft lancé ! Les logs sont dans server/server.log 😸")
 
-# 🐱 Arrêter le serveur
+# -----------------------------------
+# Arrêter le serveur
+# -----------------------------------
 def stop():
     proc = find_server_process()
     if not proc:
@@ -63,21 +106,11 @@ def stop():
         return
 
     try:
-        proc.terminate()  # tente un arrêt propre
+        proc.terminate()
         proc.wait(timeout=10)
         print("🐾 Serveur arrêté !")
     except psutil.TimeoutExpired:
         proc.kill()
         print("😼 Serveur tué de force.")
 
-# 🐱 Commande principale
-if __name__ == "__main__":
-    import sys
-    if len(sys.argv) < 2:
-        print("Usage : python script.py start|stop")
-    elif sys.argv[1] == "start":
-        start()
-    elif sys.argv[1] == "stop":
-        stop()
-    else:
-        print("Commande inconnue 😿")
+
