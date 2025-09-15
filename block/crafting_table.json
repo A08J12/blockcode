@@ -1,0 +1,5 @@
+{
+    "send": ["all",0],
+    "execute": "crafting_table",
+    "start": false
+}

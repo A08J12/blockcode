@@ -1,0 +1,5 @@
+{
+    "send": ["block",0],
+    "execute": "decorated_pot",
+    "start": false
+}

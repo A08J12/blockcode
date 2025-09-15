@@ -1,0 +1,5 @@
+{
+    "send": "0,1000",
+    "execute": "command_block",
+    "start": false
+}

@@ -1,0 +1,5 @@
+{
+    "send": [],
+    "execute": "calibrated_sculk_sensor",
+    "start": false
+}
